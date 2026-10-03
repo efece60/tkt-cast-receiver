@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TKT Player Cast Receiver</title>
+
+  <!-- Always load Google's hosted Cast Web Receiver SDK. -->
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    cast-media-player {
+      width: 100%;
+      height: 100%;
+      --background-color: #000;
+    }
+  </style>
+</head>
+
+<body>
+  <cast-media-player></cast-media-player>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const context = cast.framework.CastReceiverContext.getInstance();
+      const playerManager = context.getPlayerManager();
+
+      // TKT live-TV receiver:
+      // - use Shaka for HLS
+      // - keep the live stream close to the edge
+      // - retry temporary LAN/segment failures more aggressively
+      const playbackConfig = new cast.framework.PlaybackConfig();
+
+      // HLS: resume/start as soon as one complete segment is buffered.
+      playbackConfig.autoResumeNumberOfSegments = 1;
+
+      // Default is 3. A local phone -> Chromecast stream can briefly miss a
+      // segment while FFmpeg publishes/renames it, so allow more retries.
+      playbackConfig.segmentRequestRetryLimit = 8;
+
+      // Avoid stale manifest/segment responses in intermediaries.
+      playbackConfig.manifestRequestHandler = (requestInfo) => {
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cache-Control'] = 'no-cache';
+        requestInfo.headers['Pragma'] = 'no-cache';
+      };
+
+      playbackConfig.segmentRequestHandler = (requestInfo) => {
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cache-Control'] = 'no-cache';
+        requestInfo.headers['Pragma'] = 'no-cache';
+      };
+
+      // This receiver is currently dedicated to TKT LIVE-TV Cast.
+      // Ensure incoming HLS loads are treated as LIVE even if the sender omits it.
+      playerManager.setMessageInterceptor(
+        cast.framework.messages.MessageType.LOAD,
+        (loadRequestData) => {
+          if (loadRequestData && loadRequestData.media) {
+            const media = loadRequestData.media;
+
+            if (!media.contentUrl && media.contentId) {
+              media.contentUrl = media.contentId;
+            }
+
+            media.streamType = cast.framework.messages.StreamType.LIVE;
+
+            console.log('[TKT CAST] LOAD', {
+              contentId: media.contentId,
+              contentUrl: media.contentUrl,
+              contentType: media.contentType,
+              streamType: media.streamType
+            });
+          }
+
+          return loadRequestData;
+        }
+      );
+
+      // Useful diagnostics visible in Chrome remote debugging / Cast tools.
+      playerManager.addEventListener(
+        cast.framework.events.category.CORE,
+        (event) => {
+          console.log('[TKT CAST] EVENT', event.type, event);
+        }
+      );
+
+      const options = new cast.framework.CastReceiverOptions();
+      options.statusText = 'TKT Player';
+      options.playbackConfig = playbackConfig;
+
+      // Explicitly use Shaka for HLS. Current CAF releases already move in
+      // this direction, but we keep it explicit for reproducible behavior.
+      options.useShakaForHls = true;
+
+      // Pin the currently recommended/current stable family for this receiver
+      // so tests are reproducible. This can later be removed to follow CAF's default.
+      options.shakaVersion = '4.15.56';
+
+      // Internal receiver revision; increment when we publish a new receiver build.
+      options.versionCode = 1;
+
+      context.start(options);
+
+      console.log('[TKT CAST] TKT Player Receiver started');
+    })();
+  </script>
+</body>
+</html>
