@@ -48,18 +48,9 @@
       // segment while FFmpeg publishes/renames it, so allow more retries.
       playbackConfig.segmentRequestRetryLimit = 8;
 
-      // Avoid stale manifest/segment responses in intermediaries.
-      playbackConfig.manifestRequestHandler = (requestInfo) => {
-        requestInfo.headers = requestInfo.headers || {};
-        requestInfo.headers['Cache-Control'] = 'no-cache';
-        requestInfo.headers['Pragma'] = 'no-cache';
-      };
-
-      playbackConfig.segmentRequestHandler = (requestInfo) => {
-        requestInfo.headers = requestInfo.headers || {};
-        requestInfo.headers['Cache-Control'] = 'no-cache';
-        requestInfo.headers['Pragma'] = 'no-cache';
-      };
+      // Do not add custom request headers here. The local HLS server already
+      // disables caching in its responses; extra request headers can trigger
+      // CORS preflights on Android TV/Cast.
 
       // This receiver is currently dedicated to TKT LIVE-TV Cast.
       // Ensure incoming HLS loads are treated as LIVE even if the sender omits it.
@@ -108,7 +99,7 @@
       options.shakaVersion = '4.15.56';
 
       // Internal receiver revision; increment when we publish a new receiver build.
-      options.versionCode = 1;
+      options.versionCode = 2;
 
       context.start(options);
 
